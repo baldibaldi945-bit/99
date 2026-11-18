@@ -1,0 +1,76 @@
+
+name: PortYou Studio - Android Builder
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "PortYouStudio_GitHub_Project_v4.zip"
+      - ".github/workflows/build-portyou.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract PortYou Studio
+        run: |
+          test -f PortYouStudio_GitHub_Project_v4.zip
+          mkdir -p .github-build
+          unzip -q PortYouStudio_GitHub_Project_v4.zip -d .github-build
+          test -f .github-build/PortYouStudio/android/build.gradle
+
+      - name: Setup Java 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build packages
+        run: |
+          sdkmanager "platforms;android-28"
+          sdkmanager "build-tools;28.0.3"
+          sdkmanager "cmake;3.10.2.4988404"
+          sdkmanager "ndk;18.1.5063045"
+
+      - name: Setup compatible Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '4.6'
+
+      - name: Download required offline libraries
+        working-directory: .github-build/PortYouStudio
+        run: |
+          sh scripts/fetch-native-deps.sh
+          sh scripts/fetch-codecs.sh
+
+      - name: Build Android APK
+        working-directory: .github-build/PortYouStudio
+        run: |
+          gradle --no-daemon -p android assembleDebug
+
+      - name: Package APK and source ZIP
+        run: |
+          mkdir -p artifacts
+          cp PortYouStudio_GitHub_Project_v4.zip artifacts/PortYouStudio-source.zip
+          cp .github-build/PortYouStudio/android/app/build/outputs/apk/debug/*.apk artifacts/PortYouStudio-debug.apk
+          cd artifacts
+          zip -q PortYouStudio-Complete.zip PortYouStudio-debug.apk PortYouStudio-source.zip
+
+      - name: Upload final downloads
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortYou-Studio-Build
+          path: |
+            artifacts/PortYouStudio-debug.apk
+            artifacts/PortYouStudio-Complete.zip
