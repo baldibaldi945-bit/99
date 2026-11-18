@@ -23,37 +23,43 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/.build-source"
           ZIP_FILE=$(find "$GITHUB_WORKSPACE" -maxdepth 2 -type f -iname '*portyou*studio*.zip' -print -quit)
           if [ -n "$ZIP_FILE" ]; then
-            echo "Found project archive: $ZIP_FILE"
             unzip -q "$ZIP_FILE" -d "$GITHUB_WORKSPACE/.build-source"
             SEARCH_ROOT="$GITHUB_WORKSPACE/.build-source"
           else
-            echo "No PortYou ZIP found; checking repository source files."
             SEARCH_ROOT="$GITHUB_WORKSPACE"
           fi
           BUILD_FILE=$(find "$SEARCH_ROOT" -type f -path '*/android/build.gradle' -print -quit)
           if [ -z "$BUILD_FILE" ]; then
-            echo "ERROR: PortYou project not found. Upload the project ZIP or its extracted files."
-            find "$GITHUB_WORKSPACE" -maxdepth 3 -type f | head -80
+            echo 'ERROR: Android project not found'
             exit 1
           fi
           PROJECT_DIR="$(dirname "$(dirname "$BUILD_FILE")")"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Project located at: $PROJECT_DIR"
+          echo "Project: $PROJECT_DIR"
 
-      - name: Set up Java 8
+      - name: Setup Java 17 for Android SDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: Install Android packages
+        run: |
+          sdkmanager --install "platform-tools" "platforms;android-28" "build-tools;28.0.3" "cmake;3.10.2.4988404" "ndk;20.0.5594570"
+          yes | sdkmanager --licenses
+
+      - name: Switch to Java 8 for legacy Gradle
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '8'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android packages
-        run: |
-          sdkmanager "platform-tools" "platforms;android-28" "build-tools;28.0.3" "cmake;3.10.2.4988404" "ndk;20.0.5594570"
-
-      - name: Set up Gradle 4.6
+      - name: Setup Gradle 4.6
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '4.6'
@@ -70,8 +76,7 @@ jobs:
           sh scripts/sync-android-assets.sh
 
       - name: Build APK
-        run: |
-          gradle -p "$PROJECT_DIR/android" --no-daemon assembleDebug
+        run: gradle -p "$PROJECT_DIR/android" --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
